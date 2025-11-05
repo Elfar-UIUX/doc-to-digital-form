@@ -118,25 +118,71 @@ const Sessions = () => {
   };
 
   const handleComplete = async (sessionId: string) => {
-    const { error } = await supabase
+    // First, get the session details
+    const session = sessions.find(s => s.id === sessionId);
+    if (!session) return;
+
+    const now = new Date().toISOString();
+    
+    // Update session status
+    const { error: sessionError } = await supabase
       .from("sessions")
       .update({
         status: "COMPLETED",
-        actual_start_at: new Date().toISOString(),
-        actual_end_at: new Date().toISOString(),
+        actual_start_at: now,
+        actual_end_at: now,
       })
       .eq("id", sessionId);
 
-    if (error) {
+    if (sessionError) {
       toast({
         title: "Error completing session",
-        description: error.message,
+        description: sessionError.message,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Get student's price per hour
+    const student = students.find(s => s.id === session.student_id);
+    if (!student) {
+      toast({
+        title: "Session completed",
+        description: "Could not create ledger entry - student not found",
+        variant: "destructive",
+      });
+      loadSessions();
+      return;
+    }
+
+    // Calculate session duration in hours
+    const startTime = new Date(session.scheduled_start_at);
+    const endTime = new Date(session.scheduled_end_at);
+    const durationHours = (endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60);
+    
+    // Create ledger entry (negative amount for charge)
+    const chargeAmount = -(durationHours * Number(student.price_per_hour));
+    
+    const { error: ledgerError } = await supabase
+      .from("ledger_entries")
+      .insert({
+        student_id: session.student_id,
+        type: "SESSION_CHARGE",
+        amount: chargeAmount,
+        reference: `Session on ${new Date(session.scheduled_start_at).toLocaleDateString()}`,
+      });
+
+    if (ledgerError) {
+      toast({
+        title: "Session completed but ledger entry failed",
+        description: ledgerError.message,
         variant: "destructive",
       });
     } else {
-      toast({ title: "Session marked as completed" });
-      loadSessions();
+      toast({ title: "Session completed and charge added to ledger" });
     }
+    
+    loadSessions();
   };
 
   const handleCancel = async (sessionId: string) => {
