@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, CheckCircle, XCircle, Copy, Check } from "lucide-react";
+import { Plus, CheckCircle, XCircle, Copy, Check, Filter } from "lucide-react";
 
 interface Session {
   id: string;
@@ -21,6 +21,8 @@ interface Session {
   scheduled_end_at: string;
   zoom_join_url: string | null;
   notes: string | null;
+  whatsapp_reminder_options?: string | null;
+  whatsapp_notification_status?: string | null;
   students: {
     first_name: string;
     last_name: string;
@@ -43,11 +45,13 @@ const Sessions = () => {
   const { toast } = useToast();
 
   const [isScheduling, setIsScheduling] = useState(false);
+  const [filterStudentId, setFilterStudentId] = useState<string>("ALL");
   const [formData, setFormData] = useState({
     student_id: "",
     scheduled_start_at: "",
     scheduled_end_at: "",
     notes: "",
+    whatsapp_reminder_options: "30",
   });
 
   useEffect(() => {
@@ -55,8 +59,13 @@ const Sessions = () => {
     loadStudents();
   }, []);
 
+  useEffect(() => {
+    // reload sessions when filter changes
+    loadSessions();
+  }, [filterStudentId]);
+
   const loadSessions = async () => {
-    const { data, error } = await supabase
+    let query = supabase
       .from("sessions")
       .select(`
         *,
@@ -66,6 +75,12 @@ const Sessions = () => {
         )
       `)
       .order("scheduled_start_at", { ascending: false });
+
+    if (filterStudentId && filterStudentId !== "ALL") {
+      query = query.eq("student_id", filterStudentId);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       toast({
@@ -173,16 +188,23 @@ const Sessions = () => {
       }
     }
 
+    // Convert datetime-local values to ISO strings (treating them as local time)
+    // datetime-local gives "YYYY-MM-DDTHH:mm" format, which we need to convert to ISO with timezone
+    const startDate = new Date(formData.scheduled_start_at);
+    const endDate = new Date(formData.scheduled_end_at);
+    
     // Insert session and return id for reminder job
     const { data: insertedSession, error } = await supabase
       .from("sessions")
       .insert({
         student_id: formData.student_id,
-        scheduled_start_at: formData.scheduled_start_at,
-        scheduled_end_at: formData.scheduled_end_at,
+        scheduled_start_at: startDate.toISOString(),
+        scheduled_end_at: endDate.toISOString(),
         notes: formData.notes || null,
         status: "SCHEDULED",
         ...zoomData,
+        created_by: user?.id || null,
+        whatsapp_reminder_options: formData.whatsapp_reminder_options,
       })
       .select("id")
       .single();
@@ -194,15 +216,25 @@ const Sessions = () => {
         variant: "destructive",
       });
     } else {
-      // Enqueue WhatsApp reminder 30 minutes before session start
-      const reminderAt = new Date(new Date(formData.scheduled_start_at).getTime() - 30 * 60 * 1000).toISOString();
+      // Enqueue WhatsApp reminders based on selected options
       if (insertedSession?.id) {
-        await supabase.from("reminder_jobs").insert({
+        const startMs = new Date(formData.scheduled_start_at).getTime();
+        const opt = formData.whatsapp_reminder_options;
+        const offsets: number[] = [];
+        if (opt === '5') offsets.push(5);
+        if (opt === '15') offsets.push(15);
+        if (opt === '30') offsets.push(30);
+        if (opt === '30_5') offsets.push(30, 5);
+        const rows = offsets.map((mins) => ({
           session_id: insertedSession.id,
-          scheduled_for: reminderAt,
-          channel: "WHATSAPP",
-          status: "PENDING",
-        });
+          scheduled_for: new Date(startMs - mins * 60 * 1000).toISOString(),
+          channel: 'WHATSAPP',
+          status: 'PENDING',
+        }));
+        if (rows.length > 0) {
+          await supabase.from('reminder_jobs').insert(rows);
+          await supabase.from('sessions').update({ whatsapp_notification_status: 'PENDING' }).eq('id', insertedSession.id);
+        }
       }
 
       toast({ 
@@ -335,6 +367,19 @@ const Sessions = () => {
     });
   };
 
+  const formatLocalDateTime = (dateString: string) => {
+    const date = new Date(dateString);
+    // Format in local timezone with date and time
+    return date.toLocaleString(undefined, {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
+  };
+
   const getStatusBadge = (status: string) => {
     const variants: Record<string, "default" | "secondary" | "destructive"> = {
       SCHEDULED: "default",
@@ -417,6 +462,24 @@ const Sessions = () => {
                     onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                   />
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="wa_reminders">WhatsApp reminder</Label>
+                  <Select
+                    value={formData.whatsapp_reminder_options}
+                    onValueChange={(value) => setFormData({ ...formData, whatsapp_reminder_options: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="NONE">None</SelectItem>
+                      <SelectItem value="5">5 minutes before</SelectItem>
+                      <SelectItem value="15">15 minutes before</SelectItem>
+                      <SelectItem value="30">30 minutes before</SelectItem>
+                      <SelectItem value="30_5">30 and 5 minutes before</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="flex gap-2">
                   <Button type="submit" className="flex-1" disabled={isScheduling}>
                     {isScheduling ? t("sessions.scheduling") : t("sessions.schedule")}
@@ -440,7 +503,28 @@ const Sessions = () => {
 
         <Card>
           <CardHeader>
-            <CardTitle>{t("sessions.allSessions")}</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle>{t("sessions.allSessions")}</CardTitle>
+              <div className="flex items-center gap-2">
+                <Filter className="h-4 w-4 text-muted-foreground" />
+                <Select value={filterStudentId} onValueChange={(v) => setFilterStudentId(v)}>
+                  <SelectTrigger className="w-[200px]">
+                    <SelectValue placeholder={t("sessions.selectStudent")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL">All Students</SelectItem>
+                    {students.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>{s.first_name} {s.last_name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {filterStudentId !== "ALL" && (
+                  <Button variant="ghost" size="sm" onClick={() => setFilterStudentId("ALL")}>
+                    Clear
+                  </Button>
+                )}
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
@@ -451,6 +535,7 @@ const Sessions = () => {
                   <TableHead>{t("sessions.startTime")}</TableHead>
                   <TableHead>{t("sessions.endTime")}</TableHead>
                   <TableHead>{t("common.status")}</TableHead>
+                  <TableHead>WhatsApp</TableHead>
                   <TableHead>{t("sessions.zoomLink")}</TableHead>
                   <TableHead>{t("common.notes")}</TableHead>
                   <TableHead className="text-right">{t("common.actions")}</TableHead>
@@ -463,12 +548,15 @@ const Sessions = () => {
                       {session.students.first_name} {session.students.last_name}
                     </TableCell>
                     <TableCell>
-                      {new Date(session.scheduled_start_at).toLocaleString()}
+                      {formatLocalDateTime(session.scheduled_start_at)}
                     </TableCell>
                     <TableCell>
-                      {new Date(session.scheduled_end_at).toLocaleString()}
+                      {formatLocalDateTime(session.scheduled_end_at)}
                     </TableCell>
                     <TableCell>{getStatusBadge(session.status)}</TableCell>
+                    <TableCell>
+                      {session.whatsapp_notification_status || 'NONE'}
+                    </TableCell>
                     <TableCell>
                       {session.zoom_join_url ? (
                         <div className="flex items-center gap-2">

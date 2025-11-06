@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, DollarSign, Pencil } from "lucide-react";
+import { Plus, DollarSign, Pencil, Filter } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 
 interface LedgerEntry {
@@ -46,6 +46,7 @@ const Ledger = () => {
   const [editingEntry, setEditingEntry] = useState<LedgerEntry | null>(null);
   const { toast } = useToast();
 
+  const [filterStudentId, setFilterStudentId] = useState<string>("ALL");
   const [formData, setFormData] = useState({
     student_id: "",
     type: "PAYMENT_CONFIRMATION",
@@ -64,8 +65,12 @@ const Ledger = () => {
     loadBalances();
   }, []);
 
+  useEffect(() => {
+    loadEntries();
+  }, [filterStudentId]);
+
   const loadEntries = async () => {
-    const { data, error } = await supabase
+    let query = supabase
       .from("ledger_entries")
       .select(`
         *,
@@ -75,6 +80,12 @@ const Ledger = () => {
         )
       `)
       .order("created_at", { ascending: false });
+
+    if (filterStudentId && filterStudentId !== "ALL") {
+      query = query.eq("student_id", filterStudentId);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       toast({
@@ -584,7 +595,28 @@ const Ledger = () => {
 
         <Card>
           <CardHeader>
-            <CardTitle>All Transactions</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle>All Transactions</CardTitle>
+              <div className="flex items-center gap-2">
+                <Filter className="h-4 w-4 text-muted-foreground" />
+                <Select value={filterStudentId} onValueChange={(v) => setFilterStudentId(v)}>
+                  <SelectTrigger className="w-[200px]">
+                    <SelectValue placeholder="Select student" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL">All Students</SelectItem>
+                    {students.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>{s.first_name} {s.last_name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {filterStudentId !== "ALL" && (
+                  <Button variant="ghost" size="sm" onClick={() => setFilterStudentId("ALL")}>
+                    Clear
+                  </Button>
+                )}
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">

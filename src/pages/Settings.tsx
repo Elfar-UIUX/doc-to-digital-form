@@ -20,6 +20,8 @@ interface Profile {
   zoom_api_key: string | null;
   zoom_api_secret: string | null;
   zoom_account_id: string | null;
+  whatsapp_phone_number_id: string | null;
+  whatsapp_token: string | null;
 }
 
 const Settings = () => {
@@ -35,6 +37,8 @@ const Settings = () => {
     zoom_api_key: "",
     zoom_api_secret: "",
     zoom_account_id: "",
+    whatsapp_phone_number_id: "",
+    whatsapp_token: "",
   });
 
   useEffect(() => {
@@ -66,6 +70,8 @@ const Settings = () => {
         zoom_api_key: data.zoom_api_key || "",
         zoom_api_secret: data.zoom_api_secret || "",
         zoom_account_id: data.zoom_account_id || "",
+        whatsapp_phone_number_id: data.whatsapp_phone_number_id || "",
+        whatsapp_token: data.whatsapp_token || "",
       });
       // Update i18n language
       if (data.language) {
@@ -85,6 +91,8 @@ const Settings = () => {
         full_name: formData.full_name,
         email: formData.email,
         language: formData.language,
+        whatsapp_phone_number_id: formData.whatsapp_phone_number_id || null,
+        whatsapp_token: formData.whatsapp_token || null,
       })
       .eq("id", user.id);
 
@@ -331,6 +339,43 @@ const Settings = () => {
                 </Button>
               </div>
             )}
+          </CardContent>
+        </Card>
+
+        {/* WhatsApp Integration Section */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              {/* Reuse Video icon or add a WhatsApp-like label */}
+              WhatsApp
+            </CardTitle>
+            <CardDescription>Send reminders from your WhatsApp Business account</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="whatsapp_phone_number_id">Phone Number ID</Label>
+              <Input
+                id="whatsapp_phone_number_id"
+                value={formData.whatsapp_phone_number_id}
+                onChange={(e) => setFormData({ ...formData, whatsapp_phone_number_id: e.target.value })}
+                placeholder="e.g. 123456789012345"
+              />
+              <p className="text-xs text-muted-foreground">Find it in Meta Business → WhatsApp Manager → Phone numbers</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="whatsapp_token">Access Token</Label>
+              <Input
+                id="whatsapp_token"
+                type="password"
+                value={formData.whatsapp_token}
+                onChange={(e) => setFormData({ ...formData, whatsapp_token: e.target.value })}
+                placeholder="EAA..."
+              />
+              <p className="text-xs text-muted-foreground">Generate a permanent token in Meta Business → WhatsApp Manager</p>
+            </div>
+            <Button onClick={handleUpdateProfile} disabled={loading}>
+              {t("common.save")}
+            </Button>
           </CardContent>
         </Card>
 
