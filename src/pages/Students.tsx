@@ -5,11 +5,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil, Trash2, DollarSign, Phone, Calendar } from "lucide-react";
 
 interface Student {
   id: string;
@@ -20,6 +20,8 @@ interface Student {
   country: string;
   price_per_hour: number;
   is_active: boolean;
+  balance?: number;
+  sessionsCount?: number;
 }
 
 const Students = () => {
@@ -35,6 +37,7 @@ const Students = () => {
     phone_e164: "",
     country: "",
     price_per_hour: "",
+    is_active: true,
   });
 
   useEffect(() => {
@@ -54,16 +57,78 @@ const Students = () => {
         variant: "destructive",
       });
     } else {
-      setStudents(data || []);
+      const studentsWithBalances = await Promise.all(
+        (data || []).map(async (student) => {
+          // Get balance
+          const { data: balance } = await supabase.rpc("get_student_balance", {
+            student_uuid: student.id,
+          });
+          
+          // Get total sessions count
+          const { count: sessionsCount } = await supabase
+            .from("sessions")
+            .select("*", { count: "exact", head: true })
+            .eq("student_id", student.id);
+          
+          return {
+            ...student,
+            balance: balance || 0,
+            sessionsCount: sessionsCount || 0,
+          };
+        })
+      );
+      setStudents(studentsWithBalances);
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Validate required fields
+    if (!formData.first_name.trim()) {
+      toast({
+        title: "Validation Error",
+        description: "First name is required",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!formData.last_name.trim()) {
+      toast({
+        title: "Validation Error",
+        description: "Last name is required",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!formData.phone_e164.trim()) {
+      toast({
+        title: "Validation Error",
+        description: "Phone number is required",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!formData.price_per_hour || parseFloat(formData.price_per_hour) <= 0) {
+      toast({
+        title: "Validation Error",
+        description: "Price per hour is required and must be greater than 0",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const studentData = {
-      ...formData,
+      first_name: formData.first_name.trim(),
+      last_name: formData.last_name.trim(),
+      email: formData.email?.trim() || null,
+      phone_e164: formData.phone_e164.trim(),
+      country: formData.country?.trim() || null,
       price_per_hour: parseFloat(formData.price_per_hour),
+      is_active: formData.is_active,
     };
 
     if (editingStudent) {
@@ -111,8 +176,31 @@ const Students = () => {
       phone_e164: student.phone_e164 || "",
       country: student.country || "",
       price_per_hour: student.price_per_hour.toString(),
+      is_active: student.is_active,
     });
     setIsDialogOpen(true);
+  };
+
+  const handleToggleStatus = async (student: Student) => {
+    const newStatus = !student.is_active;
+    
+    const { error } = await supabase
+      .from("students")
+      .update({ is_active: newStatus })
+      .eq("id", student.id);
+
+    if (error) {
+      toast({
+        title: "Error updating student status",
+        description: error.message,
+        variant: "destructive",
+      });
+    } else {
+      toast({ 
+        title: `Student ${newStatus ? "activated" : "deactivated"} successfully` 
+      });
+      loadStudents();
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -140,6 +228,7 @@ const Students = () => {
       phone_e164: "",
       country: "",
       price_per_hour: "",
+      is_active: true,
     });
     setEditingStudent(null);
   };
@@ -147,9 +236,9 @@ const Students = () => {
   return (
     <Layout>
       <div className="space-y-6">
-        <div className="flex justify-between items-center">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-bold">Students</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold">Students</h1>
             <p className="text-muted-foreground mt-2">Manage your student roster</p>
           </div>
           <Dialog open={isDialogOpen} onOpenChange={(open) => {
@@ -171,7 +260,7 @@ const Students = () => {
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="first_name">First Name</Label>
+                    <Label htmlFor="first_name">First Name *</Label>
                     <Input
                       id="first_name"
                       value={formData.first_name}
@@ -180,7 +269,7 @@ const Students = () => {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="last_name">Last Name</Label>
+                    <Label htmlFor="last_name">Last Name *</Label>
                     <Input
                       id="last_name"
                       value={formData.last_name}
@@ -190,7 +279,17 @@ const Students = () => {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
+                  <Label htmlFor="phone_e164">Phone (E.164 format) *</Label>
+                  <Input
+                    id="phone_e164"
+                    placeholder="+1234567890"
+                    value={formData.phone_e164}
+                    onChange={(e) => setFormData({ ...formData, phone_e164: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email (Optional)</Label>
                   <Input
                     id="email"
                     type="email"
@@ -199,16 +298,7 @@ const Students = () => {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="phone_e164">Phone (E.164 format)</Label>
-                  <Input
-                    id="phone_e164"
-                    placeholder="+1234567890"
-                    value={formData.phone_e164}
-                    onChange={(e) => setFormData({ ...formData, phone_e164: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="country">Country</Label>
+                  <Label htmlFor="country">Country (Optional)</Label>
                   <Input
                     id="country"
                     value={formData.country}
@@ -216,15 +306,28 @@ const Students = () => {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="price_per_hour">Price per Hour ($)</Label>
+                  <Label htmlFor="price_per_hour">Price per Hour ($) *</Label>
                   <Input
                     id="price_per_hour"
                     type="number"
                     step="0.01"
+                    min="0"
                     value={formData.price_per_hour}
                     onChange={(e) => setFormData({ ...formData, price_per_hour: e.target.value })}
                     required
                   />
+                </div>
+                <div className="flex items-center justify-between space-x-2">
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      id="is_active"
+                      checked={formData.is_active}
+                      onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked })}
+                    />
+                    <Label htmlFor="is_active" className="cursor-pointer">
+                      Active Student
+                    </Label>
+                  </div>
                 </div>
                 <div className="flex gap-2">
                   <Button type="submit" className="flex-1">
@@ -246,69 +349,91 @@ const Students = () => {
           </Dialog>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>All Students</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Phone</TableHead>
-                  <TableHead>Country</TableHead>
-                  <TableHead>Price/Hour</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {students.map((student) => (
-                  <TableRow key={student.id}>
-                    <TableCell className="font-medium">
-                      {student.first_name} {student.last_name}
-                    </TableCell>
-                    <TableCell>{student.email}</TableCell>
-                    <TableCell>{student.phone_e164}</TableCell>
-                    <TableCell>{student.country}</TableCell>
-                    <TableCell>${student.price_per_hour}</TableCell>
-                    <TableCell>
-                      <Badge variant={student.is_active ? "default" : "secondary"}>
+        {students.length === 0 ? (
+          <Card>
+            <CardContent className="py-12">
+              <p className="text-center text-muted-foreground">
+                No students found. Add your first student to get started.
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {students.map((student) => (
+              <Card key={student.id} className="hover:shadow-lg transition-shadow">
+                <CardHeader>
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <CardTitle className="text-xl">
+                        {student.first_name} {student.last_name}
+                      </CardTitle>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        checked={student.is_active}
+                        onCheckedChange={() => handleToggleStatus(student)}
+                      />
+                      <Badge variant={student.is_active ? "default" : "destructive"}>
                         {student.is_active ? "Active" : "Inactive"}
                       </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleEdit(student)}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDelete(student.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">Price/Hour</span>
+                      <span className="font-semibold">${student.price_per_hour.toFixed(2)}</span>
+                    </div>
+                    {student.phone_e164 && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground flex items-center gap-1">
+                          <Phone className="h-4 w-4" />
+                          Phone
+                        </span>
+                        <span className="font-medium text-sm">{student.phone_e164}</span>
                       </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {students.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={7} className="text-center text-muted-foreground">
-                      No students found. Add your first student to get started.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+                    )}
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground flex items-center gap-1">
+                        <DollarSign className="h-4 w-4" />
+                        Balance
+                      </span>
+                      <span className={`font-semibold ${
+                        (student.balance || 0) >= 0 ? "text-success" : "text-destructive"
+                      }`}>
+                        ${(student.balance || 0).toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground flex items-center gap-1">
+                        <Calendar className="h-4 w-4" />
+                        Total Sessions
+                      </span>
+                      <span className="font-semibold">{student.sessionsCount || 0}</span>
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-2 pt-2 border-t">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleEdit(student)}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDelete(student.id)}
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
       </div>
     </Layout>
   );

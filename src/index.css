@@ -109,3 +109,34 @@ All colors MUST be HSL.
     @apply bg-background text-foreground;
   }
 }
+
+/* Phone input styling */
+.phone-input-wrapper {
+  @apply w-full;
+}
+
+.phone-input .PhoneInputInput {
+  @apply w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2;
+}
+
+/* Remove border/outline from flag icon */
+.phone-input .PhoneInputCountryIcon {
+  @apply border-0 outline-none;
+  box-shadow: none !important;
+}
+
+.phone-input .PhoneInputCountryIcon img {
+  @apply border-0 outline-none;
+  box-shadow: none !important;
+}
+
+.phone-input .PhoneInputCountrySelect {
+  @apply border-0 outline-none bg-transparent;
+  box-shadow: none !important;
+}
+
+/* Remove any box styling around the country selector */
+.phone-input .PhoneInputCountry {
+  @apply border-0 outline-none;
+  box-shadow: none !important;
+}

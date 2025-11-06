@@ -95,6 +95,21 @@ const Sessions = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Validate that end time is after start time
+    if (formData.scheduled_start_at && formData.scheduled_end_at) {
+      const startTime = new Date(formData.scheduled_start_at);
+      const endTime = new Date(formData.scheduled_end_at);
+      
+      if (endTime <= startTime) {
+        toast({
+          title: "Invalid time range",
+          description: "End time must be after start time",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
     const { error } = await supabase.from("sessions").insert({
       student_id: formData.student_id,
       scheduled_start_at: formData.scheduled_start_at,
@@ -124,6 +139,17 @@ const Sessions = () => {
 
     const now = new Date().toISOString();
     
+    // Check if ledger entry already exists for this session
+    const sessionDate = new Date(session.scheduled_start_at).toLocaleDateString();
+    const sessionReference = `Session ${sessionId} on ${sessionDate}`;
+    const { data: existingEntries } = await supabase
+      .from("ledger_entries")
+      .select("id")
+      .eq("student_id", session.student_id)
+      .eq("type", "SESSION_CHARGE")
+      .like("reference", `%Session ${sessionId}%`)
+      .limit(1);
+
     // Update session status
     const { error: sessionError } = await supabase
       .from("sessions")
@@ -140,6 +166,13 @@ const Sessions = () => {
         description: sessionError.message,
         variant: "destructive",
       });
+      return;
+    }
+
+    // Only create ledger entry if it doesn't already exist
+    if (existingEntries && existingEntries.length > 0) {
+      toast({ title: "Session completed (ledger entry already exists)" });
+      loadSessions();
       return;
     }
 
@@ -163,13 +196,17 @@ const Sessions = () => {
     // Create ledger entry (negative amount for charge)
     const chargeAmount = -(durationHours * Number(student.price_per_hour));
     
+    // Get current user for created_by field
+    const { data: { user } } = await supabase.auth.getUser();
+    
     const { error: ledgerError } = await supabase
       .from("ledger_entries")
       .insert({
         student_id: session.student_id,
         type: "SESSION_CHARGE",
         amount: chargeAmount,
-        reference: `Session on ${new Date(session.scheduled_start_at).toLocaleDateString()}`,
+        reference: sessionReference,
+        created_by: user?.id || null,
       });
 
     if (ledgerError) {
@@ -225,9 +262,9 @@ const Sessions = () => {
   return (
     <Layout>
       <div className="space-y-6">
-        <div className="flex justify-between items-center">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-bold">Sessions</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold">Sessions</h1>
             <p className="text-muted-foreground mt-2">Schedule and manage tutoring sessions</p>
           </div>
           <Dialog open={isDialogOpen} onOpenChange={(open) => {
@@ -281,6 +318,7 @@ const Sessions = () => {
                     type="datetime-local"
                     value={formData.scheduled_end_at}
                     onChange={(e) => setFormData({ ...formData, scheduled_end_at: e.target.value })}
+                    min={formData.scheduled_start_at || undefined}
                     required
                   />
                 </div>
@@ -317,7 +355,8 @@ const Sessions = () => {
             <CardTitle>All Sessions</CardTitle>
           </CardHeader>
           <CardContent>
-            <Table>
+            <div className="overflow-x-auto">
+              <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Student</TableHead>
@@ -375,6 +414,7 @@ const Sessions = () => {
                 )}
               </TableBody>
             </Table>
+            </div>
           </CardContent>
         </Card>
       </div>

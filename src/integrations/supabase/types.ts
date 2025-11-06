@@ -20,6 +20,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           id: string
+          image_url: string | null
           reference: string | null
           student_id: string
           type: Database["public"]["Enums"]["ledger_entry_type"]
@@ -29,6 +30,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          image_url?: string | null
           reference?: string | null
           student_id: string
           type: Database["public"]["Enums"]["ledger_entry_type"]
@@ -38,6 +40,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          image_url?: string | null
           reference?: string | null
           student_id?: string
           type?: Database["public"]["Enums"]["ledger_entry_type"]
@@ -58,6 +61,7 @@ export type Database = {
           email: string | null
           full_name: string | null
           id: string
+          is_approved: boolean
           updated_at: string
         }
         Insert: {
@@ -65,6 +69,7 @@ export type Database = {
           email?: string | null
           full_name?: string | null
           id: string
+          is_approved?: boolean
           updated_at?: string
         }
         Update: {
@@ -72,6 +77,7 @@ export type Database = {
           email?: string | null
           full_name?: string | null
           id?: string
+          is_approved?: boolean
           updated_at?: string
         }
         Relationships: []

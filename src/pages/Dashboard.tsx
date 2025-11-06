@@ -18,10 +18,57 @@ const Dashboard = () => {
     upcomingSessions: 0,
     completedThisMonth: 0,
   });
+  const [displayName, setDisplayName] = useState<string>("");
 
   useEffect(() => {
     loadStats();
+    loadUserProfile();
   }, []);
+
+  const loadUserProfile = async () => {
+    try {
+      // Get session first (often faster)
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) {
+        console.error("No session found");
+        setDisplayName("User");
+        return;
+      }
+
+      const user = session.user;
+      console.log("User:", user);
+      console.log("User metadata:", user.user_metadata);
+
+      // Try to get profile from profiles table
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("full_name, email")
+        .eq("id", user.id)
+        .single();
+      
+      console.log("Profile:", profile);
+      if (profileError) {
+        console.error("Error fetching profile:", profileError);
+      }
+
+      // Use full_name from profile if available, otherwise try user metadata, then email, then "User"
+      const fullName = profile?.full_name?.trim() || user.user_metadata?.full_name?.trim();
+      const email = profile?.email || user.email;
+      
+      console.log("Full name:", fullName, "Email:", email);
+      
+      if (fullName) {
+        setDisplayName(fullName);
+      } else if (email) {
+        setDisplayName(email);
+      } else {
+        setDisplayName("User");
+      }
+    } catch (error) {
+      console.error("Error in loadUserProfile:", error);
+      setDisplayName("User");
+    }
+  };
 
   const loadStats = async () => {
     // Get total and active students
@@ -89,7 +136,9 @@ const Dashboard = () => {
     <Layout>
       <div className="space-y-8">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-foreground">
+            {displayName ? `Welcome ${displayName}` : "Welcome"}
+          </h1>
           <p className="text-muted-foreground mt-2">Welcome back! Here's your overview.</p>
         </div>
 
