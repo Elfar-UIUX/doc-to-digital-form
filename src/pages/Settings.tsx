@@ -19,6 +19,7 @@ interface Profile {
   language: string;
   zoom_api_key: string | null;
   zoom_api_secret: string | null;
+  zoom_account_id: string | null;
 }
 
 const Settings = () => {
@@ -33,6 +34,7 @@ const Settings = () => {
     language: "en",
     zoom_api_key: "",
     zoom_api_secret: "",
+    zoom_account_id: "",
   });
 
   useEffect(() => {
@@ -63,6 +65,7 @@ const Settings = () => {
         language: data.language || "en",
         zoom_api_key: data.zoom_api_key || "",
         zoom_api_secret: data.zoom_api_secret || "",
+        zoom_account_id: data.zoom_account_id || "",
       });
       // Update i18n language
       if (data.language) {
@@ -102,10 +105,10 @@ const Settings = () => {
   };
 
   const handleConnectZoom = async () => {
-    if (!formData.zoom_api_key || !formData.zoom_api_secret) {
+    if (!formData.zoom_api_key || !formData.zoom_api_secret || !formData.zoom_account_id) {
       toast({
         title: "Error",
-        description: "Please enter both API Key and API Secret",
+        description: "Please enter Client ID, Client Secret, and Account ID",
         variant: "destructive",
       });
       return;
@@ -120,6 +123,7 @@ const Settings = () => {
       .update({
         zoom_api_key: formData.zoom_api_key,
         zoom_api_secret: formData.zoom_api_secret,
+        zoom_account_id: formData.zoom_account_id,
       })
       .eq("id", user.id);
 
@@ -148,6 +152,7 @@ const Settings = () => {
       .update({
         zoom_api_key: null,
         zoom_api_secret: null,
+        zoom_account_id: null,
       })
       .eq("id", user.id);
 
@@ -161,7 +166,7 @@ const Settings = () => {
       toast({
         title: t("settings.zoomDisconnectedSuccess"),
       });
-      setFormData({ ...formData, zoom_api_key: "", zoom_api_secret: "" });
+      setFormData({ ...formData, zoom_api_key: "", zoom_api_secret: "", zoom_account_id: "" });
       loadProfile();
     }
     setLoading(false);
@@ -172,7 +177,7 @@ const Settings = () => {
     navigate("/auth");
   };
 
-  const isZoomConnected = profile?.zoom_api_key && profile?.zoom_api_secret;
+  const isZoomConnected = profile?.zoom_api_key && profile?.zoom_api_secret && profile?.zoom_account_id;
 
   return (
     <Layout>
@@ -283,24 +288,43 @@ const Settings = () => {
             ) : (
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="zoom_api_key">{t("settings.zoomApiKey")}</Label>
+                  <Label htmlFor="zoom_api_key">Client ID</Label>
                   <Input
                     id="zoom_api_key"
                     type="password"
                     value={formData.zoom_api_key}
                     onChange={(e) => setFormData({ ...formData, zoom_api_key: e.target.value })}
-                    placeholder={t("settings.zoomApiKeyPlaceholder")}
+                    placeholder="Zoom OAuth Client ID"
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Found in your Zoom OAuth app settings (Server-to-Server OAuth)
+                  </p>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="zoom_api_secret">{t("settings.zoomApiSecret")}</Label>
+                  <Label htmlFor="zoom_api_secret">Client Secret</Label>
                   <Input
                     id="zoom_api_secret"
                     type="password"
                     value={formData.zoom_api_secret}
                     onChange={(e) => setFormData({ ...formData, zoom_api_secret: e.target.value })}
-                    placeholder={t("settings.zoomApiSecretPlaceholder")}
+                    placeholder="Zoom OAuth Client Secret"
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Found in your Zoom OAuth app settings (Server-to-Server OAuth)
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="zoom_account_id">Account ID</Label>
+                  <Input
+                    id="zoom_account_id"
+                    type="text"
+                    value={formData.zoom_account_id}
+                    onChange={(e) => setFormData({ ...formData, zoom_account_id: e.target.value })}
+                    placeholder="Zoom Account ID"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Found in your Zoom OAuth app settings (Server-to-Server OAuth)
+                  </p>
                 </div>
                 <Button onClick={handleConnectZoom} disabled={loading}>
                   {t("settings.connectZoom")}

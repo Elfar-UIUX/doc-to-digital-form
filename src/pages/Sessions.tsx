@@ -119,11 +119,11 @@ const Sessions = () => {
     if (user) {
       const { data: profile } = await supabase
         .from("profiles")
-        .select("zoom_api_key, zoom_api_secret")
+        .select("zoom_api_key, zoom_api_secret, zoom_account_id")
         .eq("id", user.id)
         .single();
 
-      if (profile?.zoom_api_key && profile?.zoom_api_secret) {
+      if (profile?.zoom_api_key && profile?.zoom_api_secret && profile?.zoom_account_id) {
         // Calculate duration in minutes
         const startTime = new Date(formData.scheduled_start_at);
         const endTime = new Date(formData.scheduled_end_at);

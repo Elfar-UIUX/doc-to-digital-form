@@ -2,60 +2,45 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const ZOOM_API_URL = 'https://api.zoom.us/v2';
-
-// Generate JWT token for Zoom API
-async function generateZoomJWT(apiKey: string, apiSecret: string): Promise<string> {
-  const header = {
-    alg: 'HS256',
-    typ: 'JWT',
-  };
-
-  const payload = {
-    iss: apiKey,
-    exp: Math.floor(Date.now() / 1000) + 3600, // 1 hour expiration
-  };
-
-  // Base64 URL encode
-  const base64UrlEncode = (str: string): string => {
-    return btoa(str)
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_')
-      .replace(/=/g, '');
-  };
-
-  const headerEncoded = base64UrlEncode(JSON.stringify(header));
-  const payloadEncoded = base64UrlEncode(JSON.stringify(payload));
-  
-  const signatureInput = `${headerEncoded}.${payloadEncoded}`;
-  
-  // Use Web Crypto API for HMAC-SHA256
-  const key = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(apiSecret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign']
-  );
-  
-  const signature = await crypto.subtle.sign(
-    'HMAC',
-    key,
-    new TextEncoder().encode(signatureInput)
-  );
-  
-  const signatureArray = new Uint8Array(signature);
-  const signatureEncoded = base64UrlEncode(
-    String.fromCharCode(...signatureArray)
-  );
-  
-  return `${signatureInput}.${signatureEncoded}`;
-}
+const ZOOM_TOKEN_URL = 'https://zoom.us/oauth/token';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
+
+/**
+ * Get OAuth access token from Zoom using Server-to-Server OAuth
+ */
+async function getZoomAccessToken(
+  clientId: string,
+  clientSecret: string,
+  accountId: string
+): Promise<string> {
+  // Create Basic Auth header (Client ID:Client Secret base64 encoded)
+  const credentials = btoa(`${clientId}:${clientSecret}`);
+  
+  const response = await fetch(ZOOM_TOKEN_URL, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Basic ${credentials}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams({
+      grant_type: 'account_credentials',
+      account_id: accountId,
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Unknown error' }));
+    throw new Error(`Failed to get Zoom access token: ${error.error || error.message || response.statusText}`);
+  }
+
+  const data = await response.json();
+  return data.access_token;
+}
 
 serve(async (req) => {
   // Handle CORS preflight
@@ -64,13 +49,21 @@ serve(async (req) => {
   }
 
   try {
-    // Create Supabase client
+    // Create Supabase client with auth header from request
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
     const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
     
+    // Get the authorization header - Supabase functions.invoke() passes it automatically
+    const authHeader = req.headers.get('Authorization');
+    
     const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
       global: {
-        headers: { Authorization: req.headers.get('Authorization')! },
+        headers: {
+          Authorization: authHeader || '',
+        },
+      },
+      auth: {
+        persistSession: false,
       },
     });
 
@@ -81,8 +74,12 @@ serve(async (req) => {
     } = await supabaseClient.auth.getUser();
 
     if (authError || !user) {
+      console.error('Auth error:', authError);
       return new Response(
-        JSON.stringify({ error: 'Unauthorized' }),
+        JSON.stringify({ 
+          error: 'Unauthorized',
+          details: authError?.message || 'User not found. Please ensure you are logged in.',
+        }),
         {
           status: 401,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -90,16 +87,19 @@ serve(async (req) => {
       );
     }
 
-    // Get user's Zoom credentials from profile
+    // Get user's Zoom OAuth credentials from profile
     const { data: profile, error: profileError } = await supabaseClient
       .from('profiles')
-      .select('zoom_api_key, zoom_api_secret')
+      .select('zoom_api_key, zoom_api_secret, zoom_account_id')
       .eq('id', user.id)
       .single();
 
-    if (profileError || !profile?.zoom_api_key || !profile?.zoom_api_secret) {
+    if (profileError || !profile?.zoom_api_key || !profile?.zoom_api_secret || !profile?.zoom_account_id) {
       return new Response(
-        JSON.stringify({ error: 'Zoom credentials not found. Please connect Zoom in Settings.' }),
+        JSON.stringify({ 
+          error: 'Zoom credentials not found. Please connect Zoom in Settings.',
+          details: 'Missing Client ID, Client Secret, or Account ID'
+        }),
         {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -120,17 +120,20 @@ serve(async (req) => {
       );
     }
 
-    // Generate JWT token for Zoom
-    const token = await generateZoomJWT(
+    // Get OAuth access token from Zoom
+    console.log('Getting Zoom access token for Account ID:', profile.zoom_account_id?.substring(0, 10) + '...');
+    const accessToken = await getZoomAccessToken(
       profile.zoom_api_key,
-      profile.zoom_api_secret
+      profile.zoom_api_secret,
+      profile.zoom_account_id
     );
+    console.log('Access token obtained, length:', accessToken.length);
 
-    // Create Zoom meeting
+    // Create Zoom meeting using OAuth access token
     const zoomResponse = await fetch(`${ZOOM_API_URL}/users/me/meetings`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${token}`,
+        Authorization: `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -189,4 +192,3 @@ serve(async (req) => {
     );
   }
 });
-
