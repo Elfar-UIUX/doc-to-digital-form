@@ -5,3 +5,6 @@ project_id = "fhctcakemcchymjmeuie"
 [functions.send-whatsapp-reminders]
 # This function is invoked by the scheduler; no JWT verification needed
 verify_jwt = false
+
+[functions.send-contact-email]
+verify_jwt = false

@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { GraduationCap, LayoutDashboard, Users, Calendar, DollarSign, Menu, Settings } from "lucide-react";
+import { GraduationCap, LayoutDashboard, Users, Calendar, DollarSign, Menu, Settings, FileText, Shield, HelpCircle } from "lucide-react";
 import { Session, User } from "@supabase/supabase-js";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
@@ -11,7 +11,9 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+import { Separator } from "@/components/ui/separator";
 
 interface LayoutProps {
   children: ReactNode;
@@ -363,6 +365,19 @@ const Layout = ({ children }: LayoutProps) => {
                   <Settings className="mr-2 h-4 w-4" />
                   {t("common.settings")}
                 </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => navigate("/request-help")}>
+                  <HelpCircle className="mr-2 h-4 w-4" />
+                  Request Help
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => navigate("/terms")}>
+                  <FileText className="mr-2 h-4 w-4" />
+                  Terms & Conditions
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => navigate("/privacy")}>
+                  <Shield className="mr-2 h-4 w-4" />
+                  Privacy Policy
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -401,7 +416,38 @@ const Layout = ({ children }: LayoutProps) => {
             </nav>
           </div>
 
-          <div className="absolute bottom-0 left-0 right-0 p-6 border-t border-sidebar-border">
+          <div className="absolute bottom-0 left-0 right-0 p-6 space-y-2">
+            <Separator className="w-full opacity-25" />
+            
+            {/* Legal Section - Standalone items */}
+            <Button
+              variant={isActive("/terms") ? "secondary" : "ghost"}
+              className={`w-full justify-start ${
+                isActive("/terms")
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              }`}
+              onClick={() => navigate("/terms")}
+            >
+              <FileText className="mr-3 h-5 w-5" />
+              Terms & Conditions
+            </Button>
+            <Button
+              variant={isActive("/privacy") ? "secondary" : "ghost"}
+              className={`w-full justify-start ${
+                isActive("/privacy")
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              }`}
+              onClick={() => navigate("/privacy")}
+            >
+              <Shield className="mr-3 h-5 w-5" />
+              Privacy Policy
+            </Button>
+
+            <Separator className="w-full opacity-25" />
+
+            {/* Settings Section */}
             <Button
               variant={isActive("/settings") ? "secondary" : "ghost"}
               className={`w-full justify-start ${
@@ -413,6 +459,18 @@ const Layout = ({ children }: LayoutProps) => {
             >
               <Settings className="mr-3 h-5 w-5" />
               {t("common.settings")}
+            </Button>
+            <Button
+              variant={isActive("/request-help") ? "secondary" : "ghost"}
+              className={`w-full justify-start ${
+                isActive("/request-help")
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              }`}
+              onClick={() => navigate("/request-help")}
+            >
+              <HelpCircle className="mr-3 h-5 w-5" />
+              Request Help
             </Button>
           </div>
         </aside>

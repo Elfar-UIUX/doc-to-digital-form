@@ -10,6 +10,9 @@ import Students from "./pages/Students";
 import Sessions from "./pages/Sessions";
 import Ledger from "./pages/Ledger";
 import Settings from "./pages/Settings";
+import RequestHelp from "./pages/RequestHelp";
+import Terms from "./pages/Terms";
+import Privacy from "./pages/Privacy";
 import PendingApproval from "./pages/PendingApproval";
 import NotFound from "./pages/NotFound";
 
@@ -31,6 +34,9 @@ const App = () => (
           <Route path="/sessions" element={<Sessions />} />
           <Route path="/ledger" element={<Ledger />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/request-help" element={<RequestHelp />} />
+          <Route path="/terms" element={<Terms />} />
+          <Route path="/privacy" element={<Privacy />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
