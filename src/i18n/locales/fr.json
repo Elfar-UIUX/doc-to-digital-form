@@ -74,6 +74,7 @@
     "endTime": "Heure de Fin",
     "notesOptional": "Notes (Optionnel)",
     "schedule": "Planifier",
+    "scheduling": "Planification...",
     "allSessions": "Toutes les Sessions",
     "zoomLink": "Lien Zoom",
     "errorLoading": "Erreur lors du chargement des sessions",
@@ -95,7 +96,11 @@
       "completed": "Terminée",
       "canceled": "Annulée",
       "noShow": "Absent"
-    }
+    },
+    "linkCopied": "Lien Copié",
+    "linkCopiedDescription": "Lien Zoom copié dans le presse-papiers",
+    "copyFailed": "Échec de la Copie",
+    "copyFailedDescription": "Échec de la copie du lien dans le presse-papiers"
   },
   "ledger": {
     "title": "Registre",

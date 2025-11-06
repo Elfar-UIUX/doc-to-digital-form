@@ -74,7 +74,6 @@ serve(async (req) => {
     } = await supabaseClient.auth.getUser();
 
     if (authError || !user) {
-      console.error('Auth error:', authError);
       return new Response(
         JSON.stringify({ 
           error: 'Unauthorized',
@@ -121,13 +120,11 @@ serve(async (req) => {
     }
 
     // Get OAuth access token from Zoom
-    console.log('Getting Zoom access token for Account ID:', profile.zoom_account_id?.substring(0, 10) + '...');
     const accessToken = await getZoomAccessToken(
       profile.zoom_api_key,
       profile.zoom_api_secret,
       profile.zoom_account_id
     );
-    console.log('Access token obtained, length:', accessToken.length);
 
     // Create Zoom meeting using OAuth access token
     const zoomResponse = await fetch(`${ZOOM_API_URL}/users/me/meetings`, {
@@ -155,7 +152,6 @@ serve(async (req) => {
 
     if (!zoomResponse.ok) {
       const errorData = await zoomResponse.json().catch(() => ({ message: 'Unknown error' }));
-      console.error('Zoom API error:', errorData);
       
       return new Response(
         JSON.stringify({
@@ -182,7 +178,6 @@ serve(async (req) => {
       }
     );
   } catch (error: any) {
-    console.error('Edge function error:', error);
     return new Response(
       JSON.stringify({ error: error.message || 'Internal server error' }),
       {

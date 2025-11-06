@@ -74,7 +74,6 @@ export async function createZoomMeeting(
       start_url: data.start_url,
     };
   } catch (error: any) {
-    console.error('Zoom API error:', error);
     throw new Error(error.message || 'Failed to create Zoom meeting');
   }
 }
@@ -110,7 +109,6 @@ export async function createZoomMeetingWithProfile(
       topic
     );
   } catch (error) {
-    console.error('Error creating Zoom meeting:', error);
     return null;
   }
 }

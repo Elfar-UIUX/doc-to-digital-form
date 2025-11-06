@@ -74,6 +74,7 @@
     "endTime": "وقت الانتهاء",
     "notesOptional": "ملاحظات (اختياري)",
     "schedule": "جدولة",
+    "scheduling": "جارٍ الجدولة...",
     "allSessions": "جميع الجلسات",
     "zoomLink": "رابط زوم",
     "errorLoading": "خطأ في تحميل الجلسات",
@@ -95,7 +96,11 @@
       "completed": "مكتملة",
       "canceled": "ملغاة",
       "noShow": "لم يحضر"
-    }
+    },
+    "linkCopied": "تم نسخ الرابط",
+    "linkCopiedDescription": "تم نسخ رابط زوم إلى الحافظة",
+    "copyFailed": "فشل النسخ",
+    "copyFailedDescription": "فشل نسخ الرابط إلى الحافظة"
   },
   "ledger": {
     "title": "السجل",

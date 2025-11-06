@@ -65,7 +65,6 @@ const Ledger = () => {
   }, []);
 
   const loadEntries = async () => {
-    console.log('Loading entries from database...');
     const { data, error } = await supabase
       .from("ledger_entries")
       .select(`
@@ -78,25 +77,12 @@ const Ledger = () => {
       .order("created_at", { ascending: false });
 
     if (error) {
-      console.error('Error loading entries:', error);
       toast({
         title: "Error loading ledger",
         description: error.message,
         variant: "destructive",
       });
     } else {
-      console.log('Entries loaded:', data?.length || 0, 'entries');
-      if (data && data.length > 0) {
-        // Log first few entries to verify data
-        data.slice(0, 3).forEach((entry, idx) => {
-          console.log(`Entry ${idx + 1}:`, {
-            id: entry.id,
-            amount: entry.amount,
-            type: entry.type,
-            student: `${entry.students?.first_name} ${entry.students?.last_name}`
-          });
-        });
-      }
       // Force update by creating a new array reference
       setEntries([...(data || [])]);
     }
@@ -147,12 +133,6 @@ const Ledger = () => {
     e.preventDefault();
     setIsUploading(true);
 
-    // Log current formData state at submit time
-    console.log('FormData at submit:', {
-      ...formData,
-      isAdjustmentNegative: formData.isAdjustmentNegative
-    });
-
     const amountValue = parseFloat(formData.amount);
     if (isNaN(amountValue) || amountValue <= 0) {
       toast({
@@ -174,12 +154,6 @@ const Ledger = () => {
       // Use the current formData state
       const isNegative = formData.isAdjustmentNegative;
       finalAmount = isNegative ? -amountValue : amountValue;
-      console.log('Adjustment calculation:', {
-        amountValue,
-        isAdjustmentNegative: isNegative,
-        finalAmount,
-        formDataState: formData.isAdjustmentNegative
-      });
     } else {
       finalAmount = amountValue;
     }
@@ -187,12 +161,6 @@ const Ledger = () => {
     // Get current user for created_by field
     const { data: { user } } = await supabase.auth.getUser();
     let imageUrl: string | null = null;
-
-    console.log('Image upload check:', {
-      hasImageFile: !!formData.imageFile,
-      hasExistingImage: !!formData.existingImageUrl,
-      isEditing: !!editingEntry
-    });
 
     // Upload image if provided
     if (formData.imageFile) {
@@ -211,8 +179,6 @@ const Ledger = () => {
           });
 
         if (uploadError) {
-          console.error('Upload error:', uploadError);
-          
           // Check for various bucket-related errors
           const errorMessage = uploadError.message.toLowerCase();
           if (
@@ -253,9 +219,7 @@ const Ledger = () => {
           .getPublicUrl(filePath);
 
         imageUrl = publicUrl;
-        console.log('Image uploaded successfully:', imageUrl);
       } catch (error: any) {
-        console.error('Unexpected upload error:', error);
         toast({
           title: "Error uploading image",
           description: error?.message || "An unexpected error occurred. Please check your browser console for details.",
@@ -264,12 +228,7 @@ const Ledger = () => {
         setIsUploading(false);
         return;
       }
-    } else {
-      console.log('No new image file, using existing image if available');
     }
-
-    console.log('Creating entryData, imageUrl:', imageUrl, 'existingImageUrl:', formData.existingImageUrl);
-    console.log('editingEntry check:', !!editingEntry, editingEntry?.id);
 
     const entryData: any = {
       student_id: formData.student_id,
@@ -279,19 +238,8 @@ const Ledger = () => {
       image_url: imageUrl || formData.existingImageUrl || null,
     };
 
-    console.log('About to check if editing, entryData:', entryData);
-
     if (editingEntry) {
       // Update existing entry
-      console.log('Updating entry - START:', {
-        entryId: editingEntry.id,
-        entryData,
-        originalAmount: editingEntry.amount,
-        newAmount: finalAmount,
-        type: formData.type,
-        isAdjustmentNegative: formData.isAdjustmentNegative
-      });
-      
       const { data, error } = await supabase
         .from("ledger_entries")
         .update(entryData)
@@ -305,14 +253,6 @@ const Ledger = () => {
         `);
 
       if (error) {
-        console.error('❌ Update error:', error);
-        console.error('Error details:', {
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          code: error.code
-        });
-        
         // Check if it's a permissions/RLS error
         if (error.message?.includes('policy') || error.message?.includes('permission') || error.message?.includes('row-level security')) {
           toast({
@@ -331,28 +271,6 @@ const Ledger = () => {
         setIsUploading(false);
         return;
       }
-
-      console.log('Update successful, returned data:', data);
-      
-      // If update returns empty array, it might still have succeeded but RLS is blocking the SELECT
-      if (!data || data.length === 0) {
-        console.warn('⚠️ Update returned empty array - this might indicate RLS policy issue');
-      }
-      
-      // Verify the update actually happened by fetching the entry again
-      const { data: verifyData, error: verifyError } = await supabase
-        .from("ledger_entries")
-        .select("*")
-        .eq("id", editingEntry.id)
-        .single();
-      
-      if (verifyError) {
-        console.error('Error verifying update:', verifyError);
-      } else {
-        console.log('✅ Verified updated entry from DB:', verifyData);
-        console.log('✅ Amount in database:', verifyData.amount);
-        console.log('✅ Expected amount:', finalAmount);
-      }
       
       toast({ title: "Ledger entry updated successfully" });
       setIsDialogOpen(false);
@@ -360,37 +278,34 @@ const Ledger = () => {
       setEditingEntry(null);
       
       // Reload immediately and also after a delay to ensure DB is updated
-      console.log('Reloading entries immediately...');
       await loadEntries();
       await loadBalances();
       
       // Also reload after a short delay to catch any DB replication delay
       setTimeout(async () => {
-        console.log('Reloading entries again after delay...');
         await loadEntries();
         await loadBalances();
-        console.log('Delayed reload complete');
       }, 1000);
       
       setIsUploading(false);
     } else {
       // Create new entry
       entryData.created_by = user?.id || null;
-      const { error } = await supabase.from("ledger_entries").insert(entryData);
+    const { error } = await supabase.from("ledger_entries").insert(entryData);
 
-      if (error) {
-        toast({
-          title: "Error creating entry",
-          description: error.message,
-          variant: "destructive",
-        });
-      } else {
-        toast({ title: "Ledger entry created successfully" });
-        setIsDialogOpen(false);
-        resetForm();
-        loadEntries();
-        loadBalances();
-      }
+    if (error) {
+      toast({
+        title: "Error creating entry",
+        description: error.message,
+        variant: "destructive",
+      });
+    } else {
+      toast({ title: "Ledger entry created successfully" });
+      setIsDialogOpen(false);
+      resetForm();
+      loadEntries();
+      loadBalances();
+    }
     }
     setIsUploading(false);
   };
@@ -579,12 +494,10 @@ const Ledger = () => {
                       id="isAdjustmentNegative"
                       checked={formData.isAdjustmentNegative}
                       onCheckedChange={(checked) => {
-                        console.log('Toggling adjustment sign - current:', formData.isAdjustmentNegative, 'new:', checked);
-                        setFormData((prev) => {
-                          const updated = { ...prev, isAdjustmentNegative: checked };
-                          console.log('Updated formData:', updated);
-                          return updated;
-                        });
+                        setFormData((prev) => ({
+                          ...prev,
+                          isAdjustmentNegative: checked
+                        }));
                       }}
                     />
                     <Label htmlFor="isAdjustmentNegative" className="cursor-pointer">
@@ -593,7 +506,7 @@ const Ledger = () => {
                     <span className="text-xs text-muted-foreground ml-2">
                       ({formData.isAdjustmentNegative ? "Will be negative" : "Will be positive"})
                     </span>
-                  </div>
+                </div>
                 )}
                 <div className="space-y-2">
                   <Label htmlFor="reference">Reference (Optional)</Label>
@@ -675,7 +588,7 @@ const Ledger = () => {
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
-              <Table>
+            <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Date</TableHead>

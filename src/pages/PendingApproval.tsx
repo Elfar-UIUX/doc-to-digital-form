@@ -19,7 +19,6 @@ const PendingApproval = () => {
           .single();
 
         if (error) {
-          console.error("Error checking approval:", error);
           return;
         }
 

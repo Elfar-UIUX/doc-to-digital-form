@@ -74,6 +74,7 @@
     "endTime": "End Time",
     "notesOptional": "Notes (Optional)",
     "schedule": "Schedule",
+    "scheduling": "Scheduling...",
     "allSessions": "All Sessions",
     "zoomLink": "Zoom Link",
     "errorLoading": "Error loading sessions",
@@ -95,7 +96,11 @@
       "completed": "Completed",
       "canceled": "Canceled",
       "noShow": "No Show"
-    }
+    },
+    "linkCopied": "Link Copied",
+    "linkCopiedDescription": "Zoom link copied to clipboard",
+    "copyFailed": "Copy Failed",
+    "copyFailedDescription": "Failed to copy link to clipboard"
   },
   "ledger": {
     "title": "Ledger",

@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, CheckCircle, XCircle } from "lucide-react";
+import { Plus, CheckCircle, XCircle, Copy, Check } from "lucide-react";
 
 interface Session {
   id: string;
@@ -39,8 +39,10 @@ const Sessions = () => {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [copiedLink, setCopiedLink] = useState<string | null>(null);
   const { toast } = useToast();
 
+  const [isScheduling, setIsScheduling] = useState(false);
   const [formData, setFormData] = useState({
     student_id: "",
     scheduled_start_at: "",
@@ -96,6 +98,8 @@ const Sessions = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsScheduling(true);
+    try {
 
     // Validate that end time is after start time
     if (formData.scheduled_start_at && formData.scheduled_end_at) {
@@ -152,7 +156,6 @@ const Sessions = () => {
               zoom_start_url: zoomMeeting.start_url,
             };
           } else if (zoomError) {
-            console.error("Zoom API error:", zoomError);
             toast({
               title: "Session created",
               description: zoomError.message || "Zoom meeting could not be created, but session was scheduled",
@@ -160,7 +163,6 @@ const Sessions = () => {
             });
           }
         } catch (error: any) {
-          console.error("Error creating Zoom meeting:", error);
           toast({
             title: "Session created",
             description: error.message || "Zoom meeting could not be created, but session was scheduled",
@@ -171,14 +173,19 @@ const Sessions = () => {
       }
     }
 
-    const { error } = await supabase.from("sessions").insert({
-      student_id: formData.student_id,
-      scheduled_start_at: formData.scheduled_start_at,
-      scheduled_end_at: formData.scheduled_end_at,
-      notes: formData.notes || null,
-      status: "SCHEDULED",
-      ...zoomData,
-    });
+    // Insert session and return id for reminder job
+    const { data: insertedSession, error } = await supabase
+      .from("sessions")
+      .insert({
+        student_id: formData.student_id,
+        scheduled_start_at: formData.scheduled_start_at,
+        scheduled_end_at: formData.scheduled_end_at,
+        notes: formData.notes || null,
+        status: "SCHEDULED",
+        ...zoomData,
+      })
+      .select("id")
+      .single();
 
     if (error) {
       toast({
@@ -187,6 +194,17 @@ const Sessions = () => {
         variant: "destructive",
       });
     } else {
+      // Enqueue WhatsApp reminder 30 minutes before session start
+      const reminderAt = new Date(new Date(formData.scheduled_start_at).getTime() - 30 * 60 * 1000).toISOString();
+      if (insertedSession?.id) {
+        await supabase.from("reminder_jobs").insert({
+          session_id: insertedSession.id,
+          scheduled_for: reminderAt,
+          channel: "WHATSAPP",
+          status: "PENDING",
+        });
+      }
+
       toast({ 
         title: t("sessions.sessionScheduled"),
         description: zoomData ? t("sessions.zoomLinkCreated") : undefined,
@@ -194,6 +212,9 @@ const Sessions = () => {
       setIsDialogOpen(false);
       resetForm();
       loadSessions();
+    }
+    } finally {
+      setIsScheduling(false);
     }
   };
 
@@ -397,12 +418,13 @@ const Sessions = () => {
                   />
                 </div>
                 <div className="flex gap-2">
-                  <Button type="submit" className="flex-1">
-                    {t("sessions.schedule")}
+                  <Button type="submit" className="flex-1" disabled={isScheduling}>
+                    {isScheduling ? t("sessions.scheduling") : t("sessions.schedule")}
                   </Button>
                   <Button
                     type="button"
                     variant="outline"
+                    disabled={isScheduling}
                     onClick={() => {
                       setIsDialogOpen(false);
                       resetForm();
@@ -449,14 +471,44 @@ const Sessions = () => {
                     <TableCell>{getStatusBadge(session.status)}</TableCell>
                     <TableCell>
                       {session.zoom_join_url ? (
-                        <a
-                          href={session.zoom_join_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-primary hover:underline text-sm"
-                        >
-                          {t("common.joinMeeting")}
-                        </a>
+                        <div className="flex items-center gap-2">
+                          <a
+                            href={session.zoom_join_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary hover:underline text-sm"
+                          >
+                            {t("common.joinMeeting")}
+                          </a>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6"
+                            onClick={async () => {
+                              try {
+                                await navigator.clipboard.writeText(session.zoom_join_url!);
+                                setCopiedLink(session.id);
+                                toast({
+                                  title: t("sessions.linkCopied"),
+                                  description: t("sessions.linkCopiedDescription"),
+                                });
+                                setTimeout(() => setCopiedLink(null), 2000);
+                              } catch (err) {
+                                toast({
+                                  title: t("sessions.copyFailed"),
+                                  description: t("sessions.copyFailedDescription"),
+                                  variant: "destructive",
+                                });
+                              }
+                            }}
+                          >
+                            {copiedLink === session.id ? (
+                              <Check className="h-3 w-3 text-green-600" />
+                            ) : (
+                              <Copy className="h-3 w-3" />
+                            )}
+                          </Button>
+                        </div>
                       ) : (
                         <span className="text-muted-foreground text-sm">-</span>
                       )}

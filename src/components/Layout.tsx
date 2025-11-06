@@ -87,7 +87,6 @@ const Layout = ({ children }: LayoutProps) => {
       // Check session storage first - if we have cached approval, use it immediately
       const cachedApproval = getApprovalFromStorage(currentUser.id);
         if (cachedApproval !== null) {
-          console.log("Using cached approval status:", cachedApproval);
           if (isMounted) {
             setIsApproved(cachedApproval);
             hasEverLoadedApproval.current = true;
@@ -101,13 +100,10 @@ const Layout = ({ children }: LayoutProps) => {
 
       // Skip if already checked for this user (shouldn't happen if cache is null, but safety check)
       if (hasCheckedApproval) {
-        console.log("Approval already checked, skipping");
         return;
       }
 
       try {
-        console.log("Checking approval for user (first time):", currentUser.id);
-        
         // Add timeout to prevent infinite loading
         const timeoutPromise = new Promise((_, reject) => 
           setTimeout(() => reject(new Error("Approval check timeout")), 10000)
@@ -125,18 +121,14 @@ const Layout = ({ children }: LayoutProps) => {
         ]) as any;
 
         if (!isMounted) {
-          console.log("Component unmounted, skipping approval check");
           return;
         }
 
         hasCheckedApproval = true;
 
         if (error) {
-          console.error("Error checking approval:", error);
-          
           // Check if it's a missing profile (user might not have profile yet)
           if (error.code === "PGRST116") {
-            console.log("Profile not found, treating as not approved");
             const approved = false;
             setIsApproved(approved);
             setApprovalInStorage(currentUser.id, approved);
@@ -158,7 +150,6 @@ const Layout = ({ children }: LayoutProps) => {
         }
 
         const approved = profile?.is_approved ?? false;
-        console.log("Approval status from DB:", approved);
         
         if (isMounted) {
           setIsApproved(approved);
@@ -177,7 +168,6 @@ const Layout = ({ children }: LayoutProps) => {
           }
         }
       } catch (err: any) {
-        console.error("Unexpected error checking approval:", err);
         hasCheckedApproval = true;
         if (isMounted) {
           const approved = false;
@@ -194,7 +184,6 @@ const Layout = ({ children }: LayoutProps) => {
     // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log("Auth state changed:", event);
         if (!isMounted) return;
         
         setSession(session);
@@ -210,7 +199,6 @@ const Layout = ({ children }: LayoutProps) => {
           // If we have cached approval, use it immediately and skip database check
           const cachedApproval = getApprovalFromStorage(session.user.id);
           if (cachedApproval !== null) {
-            console.log("Using cached approval from auth state change:", cachedApproval);
             setIsApproved(cachedApproval);
             hasEverLoadedApproval.current = true;
             hasCheckedApproval = true;
@@ -242,7 +230,6 @@ const Layout = ({ children }: LayoutProps) => {
         // If we have cached approval, use it immediately and skip database check
         const cachedApproval = getApprovalFromStorage(session.user.id);
         if (cachedApproval !== null) {
-          console.log("Using cached approval from initial session check:", cachedApproval);
           setIsApproved(cachedApproval);
           hasEverLoadedApproval.current = true;
           hasCheckedApproval = true;
@@ -256,7 +243,6 @@ const Layout = ({ children }: LayoutProps) => {
         setIsApproved(null);
       }
     }).catch((err) => {
-      console.error("Error getting session:", err);
       if (isMounted) {
         setIsApproved(false);
       }

@@ -350,7 +350,7 @@ const Students = () => {
         </div>
 
         {students.length === 0 ? (
-          <Card>
+        <Card>
             <CardContent className="py-12">
               <p className="text-center text-muted-foreground">
                 No students found. Add your first student to get started.
@@ -361,11 +361,11 @@ const Students = () => {
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {students.map((student) => (
               <Card key={student.id} className="hover:shadow-lg transition-shadow">
-                <CardHeader>
+          <CardHeader>
                   <div className="flex items-start justify-between">
                     <div>
                       <CardTitle className="text-xl">
-                        {student.first_name} {student.last_name}
+                      {student.first_name} {student.last_name}
                       </CardTitle>
                     </div>
                     <div className="flex items-center gap-2">
@@ -414,23 +414,23 @@ const Students = () => {
                     </div>
                   </div>
                   <div className="flex justify-end gap-2 pt-2 border-t">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleEdit(student)}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDelete(student.id)}
-                    >
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleEdit(student)}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDelete(student.id)}
+                        >
                       <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
+                        </Button>
+                      </div>
+          </CardContent>
+        </Card>
             ))}
           </div>
         )}
