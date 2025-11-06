@@ -1,8 +1,9 @@
-import { ReactNode, useEffect, useState } from "react";
+import { ReactNode, useEffect, useState, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { GraduationCap, LayoutDashboard, Users, Calendar, DollarSign, LogOut, Menu } from "lucide-react";
+import { GraduationCap, LayoutDashboard, Users, Calendar, DollarSign, Menu, Settings } from "lucide-react";
 import { Session, User } from "@supabase/supabase-js";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
@@ -20,16 +21,54 @@ const Layout = ({ children }: LayoutProps) => {
   const navigate = useNavigate();
   const location = useLocation();
   const isMobile = useIsMobile();
+  const { t, i18n } = useTranslation();
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
-  const [isApproved, setIsApproved] = useState<boolean | null>(null);
-
+  
   // Helper to get/set approval status in session storage
   const getApprovalFromStorage = (userId: string): boolean | null => {
     const stored = sessionStorage.getItem(`approval_${userId}`);
     if (stored === null) return null;
     return stored === "true";
   };
+
+  const [isApproved, setIsApproved] = useState<boolean | null>(null);
+  const hasEverLoadedApproval = useRef(false);
+  
+  // Initialize approval from session storage immediately on mount
+  useEffect(() => {
+    const initApproval = async () => {
+      const { data: { session: initialSession } } = await supabase.auth.getSession();
+      if (initialSession?.user) {
+        const cached = getApprovalFromStorage(initialSession.user.id);
+        if (cached !== null) {
+          setIsApproved(cached);
+          hasEverLoadedApproval.current = true;
+        }
+      }
+    };
+    initApproval();
+  }, []);
+
+  // Load user language preference
+  useEffect(() => {
+    const loadUserLanguage = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("language")
+        .eq("id", user.id)
+        .single();
+
+      if (profile?.language && i18n.language !== profile.language) {
+        await i18n.changeLanguage(profile.language);
+      }
+    };
+
+    loadUserLanguage();
+  }, [i18n]);
 
   const setApprovalInStorage = (userId: string, approved: boolean) => {
     sessionStorage.setItem(`approval_${userId}`, approved.toString());
@@ -45,23 +84,24 @@ const Layout = ({ children }: LayoutProps) => {
 
     // Check approval status only once per session
     const checkApproval = async (currentUser: User) => {
-      // Skip if already checked for this user
+      // Check session storage first - if we have cached approval, use it immediately
+      const cachedApproval = getApprovalFromStorage(currentUser.id);
+        if (cachedApproval !== null) {
+          console.log("Using cached approval status:", cachedApproval);
+          if (isMounted) {
+            setIsApproved(cachedApproval);
+            hasEverLoadedApproval.current = true;
+            if (!cachedApproval && location.pathname !== "/pending-approval") {
+              navigate("/pending-approval");
+            }
+          }
+          hasCheckedApproval = true;
+          return;
+        }
+
+      // Skip if already checked for this user (shouldn't happen if cache is null, but safety check)
       if (hasCheckedApproval) {
         console.log("Approval already checked, skipping");
-        return;
-      }
-
-      // Check session storage first
-      const cachedApproval = getApprovalFromStorage(currentUser.id);
-      if (cachedApproval !== null) {
-        console.log("Using cached approval status:", cachedApproval);
-        if (isMounted) {
-          setIsApproved(cachedApproval);
-          if (!cachedApproval && location.pathname !== "/pending-approval") {
-            navigate("/pending-approval");
-          }
-        }
-        hasCheckedApproval = true;
         return;
       }
 
@@ -100,6 +140,7 @@ const Layout = ({ children }: LayoutProps) => {
             const approved = false;
             setIsApproved(approved);
             setApprovalInStorage(currentUser.id, approved);
+            hasEverLoadedApproval.current = true;
             if (location.pathname !== "/pending-approval") {
               navigate("/pending-approval");
             }
@@ -109,6 +150,7 @@ const Layout = ({ children }: LayoutProps) => {
           const approved = false;
           setIsApproved(approved);
           setApprovalInStorage(currentUser.id, approved);
+          hasEverLoadedApproval.current = true;
           if (location.pathname !== "/pending-approval") {
             navigate("/pending-approval");
           }
@@ -121,6 +163,7 @@ const Layout = ({ children }: LayoutProps) => {
         if (isMounted) {
           setIsApproved(approved);
           setApprovalInStorage(currentUser.id, approved);
+          hasEverLoadedApproval.current = true;
 
           if (!approved) {
             if (location.pathname !== "/pending-approval") {
@@ -140,6 +183,7 @@ const Layout = ({ children }: LayoutProps) => {
           const approved = false;
           setIsApproved(approved);
           setApprovalInStorage(currentUser.id, approved);
+          hasEverLoadedApproval.current = true;
           if (location.pathname !== "/pending-approval") {
             navigate("/pending-approval");
           }
@@ -163,6 +207,19 @@ const Layout = ({ children }: LayoutProps) => {
           }
           navigate("/auth");
         } else if (session.user) {
+          // If we have cached approval, use it immediately and skip database check
+          const cachedApproval = getApprovalFromStorage(session.user.id);
+          if (cachedApproval !== null) {
+            console.log("Using cached approval from auth state change:", cachedApproval);
+            setIsApproved(cachedApproval);
+            hasEverLoadedApproval.current = true;
+            hasCheckedApproval = true;
+            if (!cachedApproval && location.pathname !== "/pending-approval") {
+              navigate("/pending-approval");
+            }
+            return;
+          }
+          
           // Reset check flag for new user
           if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
             hasCheckedApproval = false;
@@ -182,6 +239,18 @@ const Layout = ({ children }: LayoutProps) => {
       if (!session) {
         navigate("/auth");
       } else if (session.user) {
+        // If we have cached approval, use it immediately and skip database check
+        const cachedApproval = getApprovalFromStorage(session.user.id);
+        if (cachedApproval !== null) {
+          console.log("Using cached approval from initial session check:", cachedApproval);
+          setIsApproved(cachedApproval);
+          hasEverLoadedApproval.current = true;
+          hasCheckedApproval = true;
+          if (!cachedApproval && location.pathname !== "/pending-approval") {
+            navigate("/pending-approval");
+          }
+          return;
+        }
         await checkApproval(session.user);
       } else {
         setIsApproved(null);
@@ -199,11 +268,6 @@ const Layout = ({ children }: LayoutProps) => {
     };
   }, [navigate]); // Removed location.pathname from dependencies
 
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    navigate("/auth");
-  };
-
   const handleNavClick = (path: string) => {
     navigate(path);
   };
@@ -211,10 +275,11 @@ const Layout = ({ children }: LayoutProps) => {
   const isActive = (path: string) => location.pathname === path;
 
   const navItems = [
-    { path: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-    { path: "/students", icon: Users, label: "Students" },
-    { path: "/sessions", icon: Calendar, label: "Sessions" },
-    { path: "/ledger", icon: DollarSign, label: "Ledger" },
+    { path: "/dashboard", icon: LayoutDashboard, label: t("common.dashboard") },
+    { path: "/students", icon: Users, label: t("common.students") },
+    { path: "/sessions", icon: Calendar, label: t("common.sessions") },
+    { path: "/ledger", icon: DollarSign, label: t("common.ledger") },
+    { path: "/settings", icon: Settings, label: t("common.settings") },
   ];
 
   // If we're on the pending approval page, don't show Layout
@@ -227,8 +292,51 @@ const Layout = ({ children }: LayoutProps) => {
     return null;
   }
 
-  // Show loading state while checking approval
-  if (!session || !user || isApproved === null) {
+  // Check if we have any cached approval in session storage (check all possible keys)
+  // This helps us avoid loading even if user state is temporarily null during navigation
+  const hasAnyCachedApproval = (): boolean => {
+    // Check all session storage keys for approval
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const key = sessionStorage.key(i);
+      if (key && key.startsWith('approval_')) {
+        const value = sessionStorage.getItem(key);
+        if (value === 'true') {
+          return true;
+        }
+      }
+    }
+    return false;
+  };
+
+  // Check specific user's cached approval if we have a user
+  const hasUserCachedApproval = user ? getApprovalFromStorage(user.id) === true : false;
+  const hasAnyApproval = hasUserCachedApproval || hasAnyCachedApproval();
+  
+  // Restore approval from cache if we have it but state is null
+  useEffect(() => {
+    if (isApproved === null && hasAnyApproval) {
+      // Try to get the user ID from any approval key
+      for (let i = 0; i < sessionStorage.length; i++) {
+        const key = sessionStorage.key(i);
+        if (key && key.startsWith('approval_') && sessionStorage.getItem(key) === 'true') {
+          setIsApproved(true);
+          hasEverLoadedApproval.current = true;
+          break;
+        }
+      }
+    }
+  }, [isApproved, hasAnyApproval]);
+  
+  // Show loading only if:
+  // 1. We've never successfully loaded approval before (most important check)
+  // 2. AND we don't have approval status in state
+  // 3. AND we don't have any cached approval
+  // Note: Once we've loaded approval once, never show loading again (even if state is temporarily null)
+  const shouldShowLoading = !hasEverLoadedApproval.current && 
+                            isApproved === null && 
+                            !hasAnyApproval;
+  
+  if (shouldShowLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -265,9 +373,9 @@ const Layout = ({ children }: LayoutProps) => {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={handleSignOut}>
-                  <LogOut className="mr-2 h-4 w-4" />
-                  Sign Out
+                <DropdownMenuItem onClick={() => navigate("/settings")}>
+                  <Settings className="mr-2 h-4 w-4" />
+                  {t("common.settings")}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -289,7 +397,7 @@ const Layout = ({ children }: LayoutProps) => {
             </div>
 
             <nav className="space-y-2">
-              {navItems.map((item) => (
+              {navItems.filter((item) => item.path !== "/settings").map((item) => (
                 <Button
                   key={item.path}
                   variant={isActive(item.path) ? "secondary" : "ghost"}
@@ -309,12 +417,16 @@ const Layout = ({ children }: LayoutProps) => {
 
           <div className="absolute bottom-0 left-0 right-0 p-6 border-t border-sidebar-border">
             <Button
-              variant="ghost"
-              className="w-full justify-start text-sidebar-foreground hover:bg-sidebar-accent"
-              onClick={handleSignOut}
+              variant={isActive("/settings") ? "secondary" : "ghost"}
+              className={`w-full justify-start ${
+                isActive("/settings")
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              }`}
+              onClick={() => navigate("/settings")}
             >
-              <LogOut className="mr-3 h-5 w-5" />
-              Sign Out
+              <Settings className="mr-3 h-5 w-5" />
+              {t("common.settings")}
             </Button>
           </div>
         </aside>
@@ -329,7 +441,7 @@ const Layout = ({ children }: LayoutProps) => {
       {isMobile && (
         <nav className="fixed bottom-0 left-0 right-0 z-50 border-t bg-background">
           <div className="grid h-16 grid-cols-4">
-            {navItems.map((item) => {
+            {navItems.filter((item) => item.path !== "/settings").map((item) => {
               const Icon = item.icon;
               const active = isActive(item.path);
               return (

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import Layout from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
@@ -12,6 +13,7 @@ interface DashboardStats {
 }
 
 const Dashboard = () => {
+  const { t } = useTranslation();
   const [stats, setStats] = useState<DashboardStats>({
     totalStudents: 0,
     activeStudents: 0,
@@ -109,7 +111,7 @@ const Dashboard = () => {
 
   const statCards = [
     {
-      title: "Active Students",
+      title: t("dashboard.activeStudents"),
       value: stats.activeStudents,
       total: stats.totalStudents,
       icon: Users,
@@ -117,14 +119,14 @@ const Dashboard = () => {
       bgColor: "bg-primary/10",
     },
     {
-      title: "Upcoming Sessions",
+      title: t("dashboard.upcomingSessions"),
       value: stats.upcomingSessions,
       icon: Calendar,
       color: "text-secondary",
       bgColor: "bg-secondary/10",
     },
     {
-      title: "Completed This Month",
+      title: t("dashboard.completedThisMonth"),
       value: stats.completedThisMonth,
       icon: CheckCircle,
       color: "text-success",
@@ -137,9 +139,9 @@ const Dashboard = () => {
       <div className="space-y-8">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-foreground">
-            {displayName ? `Welcome ${displayName}` : "Welcome"}
+            {displayName ? `${t("common.welcome")} ${displayName}` : t("common.welcome")}
           </h1>
-          <p className="text-muted-foreground mt-2">Welcome back! Here's your overview.</p>
+          <p className="text-muted-foreground mt-2">{t("common.welcomeBack")}</p>
         </div>
 
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">

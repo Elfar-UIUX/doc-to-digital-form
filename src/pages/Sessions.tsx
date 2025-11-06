@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,6 +35,7 @@ interface Student {
 }
 
 const Sessions = () => {
+  const { t } = useTranslation();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -65,7 +67,7 @@ const Sessions = () => {
 
     if (error) {
       toast({
-        title: "Error loading sessions",
+        title: t("sessions.errorLoading"),
         description: error.message,
         variant: "destructive",
       });
@@ -101,12 +103,71 @@ const Sessions = () => {
       const endTime = new Date(formData.scheduled_end_at);
       
       if (endTime <= startTime) {
-        toast({
-          title: "Invalid time range",
-          description: "End time must be after start time",
-          variant: "destructive",
-        });
+      toast({
+        title: t("sessions.invalidTimeRange"),
+        description: t("sessions.endTimeAfterStart"),
+        variant: "destructive",
+      });
         return;
+      }
+    }
+
+    // Check if user has Zoom integrated
+    const { data: { user } } = await supabase.auth.getUser();
+    let zoomData = null;
+
+    if (user) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("zoom_api_key, zoom_api_secret")
+        .eq("id", user.id)
+        .single();
+
+      if (profile?.zoom_api_key && profile?.zoom_api_secret) {
+        // Calculate duration in minutes
+        const startTime = new Date(formData.scheduled_start_at);
+        const endTime = new Date(formData.scheduled_end_at);
+        const durationMinutes = Math.round((endTime.getTime() - startTime.getTime()) / (1000 * 60));
+
+        // Get student name for meeting topic
+        const selectedStudent = students.find(s => s.id === formData.student_id);
+        const topic = selectedStudent 
+          ? `Tutoring Session - ${selectedStudent.first_name} ${selectedStudent.last_name}`
+          : "Tutoring Session";
+
+        try {
+          // Create Zoom meeting via Edge Function
+          const { data: zoomMeeting, error: zoomError } = await supabase.functions.invoke('create-zoom-meeting', {
+            body: {
+              start_time: formData.scheduled_start_at,
+              duration: durationMinutes,
+              topic: topic,
+            },
+          });
+
+          if (!zoomError && zoomMeeting) {
+            zoomData = {
+              zoom_meeting_id: zoomMeeting.id,
+              zoom_join_url: zoomMeeting.join_url,
+              zoom_start_url: zoomMeeting.start_url,
+            };
+          } else if (zoomError) {
+            console.error("Zoom API error:", zoomError);
+            toast({
+              title: "Session created",
+              description: zoomError.message || "Zoom meeting could not be created, but session was scheduled",
+              variant: "destructive",
+            });
+          }
+        } catch (error: any) {
+          console.error("Error creating Zoom meeting:", error);
+          toast({
+            title: "Session created",
+            description: error.message || "Zoom meeting could not be created, but session was scheduled",
+            variant: "destructive",
+          });
+          // Continue without Zoom if it fails
+        }
       }
     }
 
@@ -116,16 +177,20 @@ const Sessions = () => {
       scheduled_end_at: formData.scheduled_end_at,
       notes: formData.notes || null,
       status: "SCHEDULED",
+      ...zoomData,
     });
 
     if (error) {
       toast({
-        title: "Error creating session",
+        title: t("sessions.errorCreating"),
         description: error.message,
         variant: "destructive",
       });
     } else {
-      toast({ title: "Session scheduled successfully" });
+      toast({ 
+        title: t("sessions.sessionScheduled"),
+        description: zoomData ? t("sessions.zoomLinkCreated") : undefined,
+      });
       setIsDialogOpen(false);
       resetForm();
       loadSessions();
@@ -256,7 +321,8 @@ const Sessions = () => {
       CANCELED: "destructive",
       NO_SHOW: "destructive",
     };
-    return <Badge variant={variants[status] || "default"}>{status}</Badge>;
+    const statusKey = status.toLowerCase();
+    return <Badge variant={variants[status] || "default"}>{t(`sessions.status.${statusKey}`)}</Badge>;
   };
 
   return (
@@ -264,8 +330,8 @@ const Sessions = () => {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold">Sessions</h1>
-            <p className="text-muted-foreground mt-2">Schedule and manage tutoring sessions</p>
+            <h1 className="text-2xl sm:text-3xl font-bold">{t("sessions.title")}</h1>
+            <p className="text-muted-foreground mt-2">{t("sessions.description")}</p>
           </div>
           <Dialog open={isDialogOpen} onOpenChange={(open) => {
             setIsDialogOpen(open);
@@ -274,23 +340,23 @@ const Sessions = () => {
             <DialogTrigger asChild>
               <Button>
                 <Plus className="mr-2 h-4 w-4" />
-                Schedule Session
+                {t("sessions.scheduleSession")}
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-md">
               <DialogHeader>
-                <DialogTitle>Schedule New Session</DialogTitle>
+                <DialogTitle>{t("sessions.newSession")}</DialogTitle>
               </DialogHeader>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="student_id">Student</Label>
+                  <Label htmlFor="student_id">{t("sessions.student")}</Label>
                   <Select
                     value={formData.student_id}
                     onValueChange={(value) => setFormData({ ...formData, student_id: value })}
                     required
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Select a student" />
+                      <SelectValue placeholder={t("sessions.selectStudent")} />
                     </SelectTrigger>
                     <SelectContent>
                       {students.map((student) => (
@@ -302,7 +368,7 @@ const Sessions = () => {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="scheduled_start_at">Start Time</Label>
+                  <Label htmlFor="scheduled_start_at">{t("sessions.startTime")}</Label>
                   <Input
                     id="scheduled_start_at"
                     type="datetime-local"
@@ -312,7 +378,7 @@ const Sessions = () => {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="scheduled_end_at">End Time</Label>
+                  <Label htmlFor="scheduled_end_at">{t("sessions.endTime")}</Label>
                   <Input
                     id="scheduled_end_at"
                     type="datetime-local"
@@ -323,7 +389,7 @@ const Sessions = () => {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="notes">Notes (Optional)</Label>
+                  <Label htmlFor="notes">{t("sessions.notesOptional")}</Label>
                   <Input
                     id="notes"
                     value={formData.notes}
@@ -332,7 +398,7 @@ const Sessions = () => {
                 </div>
                 <div className="flex gap-2">
                   <Button type="submit" className="flex-1">
-                    Schedule
+                    {t("sessions.schedule")}
                   </Button>
                   <Button
                     type="button"
@@ -342,7 +408,7 @@ const Sessions = () => {
                       resetForm();
                     }}
                   >
-                    Cancel
+                    {t("common.cancel")}
                   </Button>
                 </div>
               </form>
@@ -352,19 +418,20 @@ const Sessions = () => {
 
         <Card>
           <CardHeader>
-            <CardTitle>All Sessions</CardTitle>
+            <CardTitle>{t("sessions.allSessions")}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
               <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Student</TableHead>
-                  <TableHead>Start Time</TableHead>
-                  <TableHead>End Time</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Notes</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead>{t("sessions.student")}</TableHead>
+                  <TableHead>{t("sessions.startTime")}</TableHead>
+                  <TableHead>{t("sessions.endTime")}</TableHead>
+                  <TableHead>{t("common.status")}</TableHead>
+                  <TableHead>{t("sessions.zoomLink")}</TableHead>
+                  <TableHead>{t("common.notes")}</TableHead>
+                  <TableHead className="text-right">{t("common.actions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -380,6 +447,20 @@ const Sessions = () => {
                       {new Date(session.scheduled_end_at).toLocaleString()}
                     </TableCell>
                     <TableCell>{getStatusBadge(session.status)}</TableCell>
+                    <TableCell>
+                      {session.zoom_join_url ? (
+                        <a
+                          href={session.zoom_join_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline text-sm"
+                        >
+                          {t("common.joinMeeting")}
+                        </a>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">-</span>
+                      )}
+                    </TableCell>
                     <TableCell className="max-w-xs truncate">
                       {session.notes || "-"}
                     </TableCell>
@@ -407,8 +488,8 @@ const Sessions = () => {
                 ))}
                 {sessions.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center text-muted-foreground">
-                      No sessions found. Schedule your first session to get started.
+                    <TableCell colSpan={7} className="text-center text-muted-foreground">
+                      {t("sessions.noSessions")}
                     </TableCell>
                   </TableRow>
                 )}
